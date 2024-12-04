@@ -1,9 +1,11 @@
 #!/bin/bash
 set -e
 
+mkdir instance
+
 # Create the SQLite database file
 sqlite3 instance/prod.db <<EOF
-  CREATE TABLE users (
+  CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY,
     login VARCHAR(80) UNIQUE NOT NULL,
     email VARCHAR(120) UNIQUE NOT NULL,
@@ -14,7 +16,7 @@ sqlite3 instance/prod.db <<EOF
     image VARCHAR(255)
   );
 
-  CREATE TABLE countries (
+  CREATE TABLE IF NOT EXISTS countries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT,
     alpha2 TEXT,
