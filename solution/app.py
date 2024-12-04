@@ -1,0 +1,123 @@
+import hashlib
+from flask import Flask, request, jsonify
+from flask_login import UserMixin
+from flask_sqlalchemy import SQLAlchemy
+
+app = Flask(__name__)
+
+app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///prod.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
+
+def generate_password_hash(password):
+    password_hashed = hashlib.md5(password.encode()).hexdigest()
+    return password_hashed
+
+class Countries(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.Text, nullable=False)
+    alpha2 = db.Column(db.Text, nullable=False)
+    alpha3 = db.Column(db.Text, nullable=False)
+    region = db.Column(db.Text, nullable=False)
+
+class User(db.Model, UserMixin):
+    __tablename__ = 'users'     
+
+    id = db.Column(db.Integer, primary_key=True)
+    login = db.Column(db.String(80), unique=True, nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password = db.Column(db.String(128), nullable=False)
+    country_code = db.Column(db.String(2), nullable=False)  # Assuming 2-letter country code
+    is_public = db.Column(db.Boolean, nullable=False)
+    phone = db.Column(db.String(15), nullable=True)
+    image = db.Column(db.String(255), nullable=True)
+
+    def __init__(self, login, email, password, country_code, is_public, phone=None, image=None):
+        self.login = login
+        self.email = email
+        self.password = generate_password_hash(password)  # Hash the password
+        self.country_code = country_code
+        self.is_public = is_public
+        self.phone = phone
+        self.image = image
+
+
+
+@app.route('/api/auth/register', methods=['POST'])
+def register_user():
+    data = request.json
+    print(data) 
+
+    required_fields = ['login', 'email', 'password', 'countryCode', 'isPublic']
+    for field in required_fields:
+        if field not in data:
+            return jsonify({"error": f"{field} is required"}), 400
+
+    # Check if a user with the same login, email, or phone already exists
+    existing_user = User.query.filter(
+        (User .login == data['login']) |
+        (User .email == data['email']) |
+        (User .phone == data.get('phone'))
+    ).first()
+
+    if existing_user:
+        return jsonify({"error": "User  with this login, email, or phone already exists"}), 409
+
+    new_user = User(
+        login=data['login'],
+        email=data['email'],
+        password=data['password'],  # Password will be hashed in the model
+        country_code=data['countryCode'],
+        is_public=data['isPublic'],
+        phone=data.get('phone'),
+        image=data.get('image')
+    )
+
+    db.session.add(new_user)
+    db.session.commit()
+
+    return jsonify({"message": "User  registered successfully"}), 201
+
+
+@app.route('/api/countries', methods=['GET'])
+def get_countries():
+    regions = request.args.getlist('region')
+
+    if not regions:
+        countries = Countries.query.order_by(Countries.alpha2).all()
+    else:
+        countries = Countries.query.filter(Countries.region.in_(regions)).order_by(Countries.alpha2).all()
+
+    if not countries:
+        return jsonify({"reason": "Invalid region"}), 400
+
+    return jsonify([{
+        "name": country.name,
+        "alpha2": country.alpha2,
+        "alpha3": country.alpha3,
+        "region": country.region
+    } for country in countries])
+
+
+@app.route('/api/countries/<aplha2_code>', methods=['GET'])
+def get_countries_by_alpha2_code(aplha2_code):
+    countries = Countries.query.filter(Countries.alpha2.in_([aplha2_code])).all()
+
+    if not countries:
+        return jsonify({"reason": "Invalid region"}), 404
+
+    return jsonify([{
+        "name": country.name,
+        "alpha2": country.alpha2,
+        "alpha3": country.alpha3,
+        "region": country.region
+    } for country in countries])
+
+@app.route('/api/ping', methods=['GET'])
+def send():
+    return "ok", 200
+
+
+if __name__ == "__main__":
+    app.run(debug=True)
