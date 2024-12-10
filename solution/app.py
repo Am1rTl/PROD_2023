@@ -39,7 +39,7 @@ class User(db.Model, UserMixin):
     def __init__(self, login, email, password, country_code, is_public, phone=None, image=None):
         self.login = login
         self.email = email
-        self.password = generate_password_hash(password)  # Hash the password
+        self.password = password  # Hash the password
         self.country_code = country_code
         self.is_public = is_public
         self.phone = phone
@@ -51,11 +51,15 @@ def sign_in():
     login = data.get('login')
     password = data.get('password')
 
+    print(f"The username '{login}'")
+    print(f"The password '{password}'")
+
     if not login or not password:
         return jsonify({"reason": "Login and password are required"}), 400
 
     user = User.query.filter_by(login=login).first()
 
+    print(user.password, generate_password_hash(password) )
     if user and user.password == generate_password_hash(password):
         access_token = create_access_token(identity=user.id)
         return jsonify(token=access_token), 200
@@ -72,6 +76,9 @@ def register_user():
         if field not in data:
             return jsonify({"reason": f"{field} is required"}), 400
 
+    print(f"The username '{data['login']}'")
+    print(f"The password '{data['password']}'")
+
     existing_user = User.query.filter(
         (User.login == data['login']) |
         (User.email == data['email']) |
@@ -80,15 +87,16 @@ def register_user():
 
     if existing_user:
         return jsonify({"reason": "User  with this login, email, or phone already exists"}), 409
-
+    hash = generate_password_hash(data['password'])
+    print(hash)
     new_user = User(
-        login=data['login'],
-        email=data['email'],
-        password=generate_password_hash(data['password']),
-        country_code=data['countryCode'],
-        is_public=data['isPublic'],
-        phone=data.get('phone'),
-        image=data.get('image')
+        login = data['login'],
+        email = data['email'],
+        password = hash,
+        country_code = data['countryCode'],
+        is_public = data['isPublic'],
+        phone = data.get('phone'),
+        image = data.get('image')
     )
 
     db.session.add(new_user)
@@ -134,4 +142,4 @@ def send():
     return "ok", 200
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, port=8080)
