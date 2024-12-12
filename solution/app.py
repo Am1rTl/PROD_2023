@@ -74,9 +74,6 @@ def register_user():
         if field not in data:
             return jsonify({"reason": f"{field} is required"}), 400
 
-    print(f"The username '{data['login']}'")
-    print(f"The password '{data['password']}'")
-
     existing_user = User.query.filter(
         (User.login == data['login']) |
         (User.email == data['email']) |
@@ -86,7 +83,6 @@ def register_user():
     if existing_user:
         return jsonify({"reason": "User with this login, email, or phone already exists"}), 409
     hash = generate_password_hash(data['password'])
-    print(hash)
     new_user = User(
         login = data['login'],
         email = data['email'],
@@ -139,7 +135,7 @@ def get_countries_by_alpha2_code(alpha2_code):
 def send():
     return "ok", 200
 
-@app.route('/api/me/profile', methods=['GET', 'POST'])
+@app.route('/api/me/profile', methods=['GET', 'PATCH'])
 @jwt_required()
 def profile():
     if request.method == "GET":
@@ -156,21 +152,30 @@ def profile():
             }), 200
         else:
             return jsonify({"reason": "User not found"}), 401
-    elif request.method == "POST":
-        data = request.json
+    elif request.method == "PATCH":
         user_id = int(get_jwt_identity())
         user = User.query.get(user_id)
         if user:
-            if user.password == generate_password_hash(data["oldPassword"]):
-                if len(data["newPassword"]) < 8 :
-                    return jsonify({"reason": "Password must be at least 8 characters long"}), 400
-                else:
-                    user.password = generate_password_hash(data["newPassword"])
-                    db.session.commit()
-                    return jsonify({"status": "ok"}), 200
-            else:
-                return jsonify({"reason": "Old password is incorrect"}), 403
             
+        
+
+@app.route("/api/me/updatePassword", methods=["POST"])
+@jwt_required()
+def update_password():
+    data = request.json
+    user_id = int(get_jwt_identity())
+    user = User.query.get(user_id)
+    if user:
+        if user.password == generate_password_hash(data["oldPassword"]):
+            if len(data["newPassword"]) < 8 :
+                return jsonify({"reason": "Password must be at least 8 characters long"}), 400
+            else:
+                user.password = generate_password_hash(data["newPassword"])
+                db.session.commit()
+                return jsonify({"status": "ok"}), 200
+        else:
+            return jsonify({"reason": "Old password is incorrect"}), 403
+        
 @app.route('/api/profiles/<profile_login>', methods=['GET', 'POST'])
 @jwt_required()
 def get_public_profile(profile_login):
@@ -187,9 +192,11 @@ def get_public_profile(profile_login):
     else:
         return jsonify({"reason": "User not found"}), 403
     
-
-
-
+@app.route('/api/profiles/', methods=['GET'])
+@jwt_required()
+def no_login():
+    return jsonify({"reason": "You must be logged in to access this endpoint"}), 403
+    
 
 
 if __name__ == "__main__":
