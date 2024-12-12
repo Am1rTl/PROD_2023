@@ -153,10 +153,54 @@ def profile():
         else:
             return jsonify({"reason": "User not found"}), 401
     elif request.method == "PATCH":
+        try:
+            data = request.json.pop('password')
+        except:
+            data = request.json
         user_id = int(get_jwt_identity())
         user = User.query.get(user_id)
         if user:
-            
+            if 'login' in data:
+                if not isinstance(data['login'], str) or len(data['login']) < 3 or len(data['login']) > 80:
+                    return jsonify({"reason": "Login must be a string with a length between 3 and 80 characters"}), 400
+                user.login = data['login']
+            if 'email' in data:
+                if not isinstance(data['email'], str) or len(data['email']) < 5 or len(data['email']) > 120:
+                    return jsonify({"reason": "Email must be a string with a length between 5 and 120 characters"}), 400
+                existing_user = User.query.filter_by(email=data['email']).first()
+                if existing_user and existing_user.id != user_id:
+                    return jsonify({"reason": "Email already in use"}), 400
+                user.email = data['email']
+            if 'countryCode' in data:
+                country = Countries.query.filter_by(alpha2=data['countryCode']).first()
+                if not country:
+                    return jsonify({"reason": "Country with the specified code not found"}), 400
+                user.country_code = data['countryCode']
+            if 'isPublic' in data:
+                if not isinstance(data['isPublic'], bool):
+                    return jsonify({"reason": "IsPublic must be a boolean"}), 400
+                user.is_public = data['isPublic']
+            if 'phone' in data:
+                if not isinstance(data['phone'], str) or len(data['phone']) < 5 or len(data['phone']) > 15:
+                    return jsonify({"reason": "Phone must be a string with a length between 5 and 15 characters"}), 400
+                existing_user = User.query.filter_by(phone=data['phone']).first()
+                if existing_user and existing_user.id != user_id:
+                    return jsonify({"reason": "Phone already in use"}), 400
+                user.phone = data['phone']
+            if 'image' in data:
+                if not isinstance(data['image'], str) or len(data['image']) > 255:
+                    return jsonify({"reason": "Image link must be a string with a length not exceeding 255 characters"}), 400
+                user.image = data['image']
+            db.session.commit()
+            return jsonify({
+                "login": user.login,
+                "email": user.email,
+                "country_code": user.country_code,
+                "is_public": user.is_public,
+                "phone": user.phone,
+                "image": user.image
+            }), 200
+                            
         
 
 @app.route("/api/me/updatePassword", methods=["POST"])
