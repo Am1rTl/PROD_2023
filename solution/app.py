@@ -72,6 +72,9 @@ def register_user():
     print(data) 
 
     required_fields = ['login', 'email', 'password', 'countryCode', 'isPublic']
+    missing_fields = [field for field in required_fields if field not in data]
+    if missing_fields:
+        return jsonify({"reason": f"Missing fields {', '.join(missing_fields)} is required"}), 400
     for field in required_fields:
         if field not in data:
             return jsonify({"reason": f"{field} is required"}), 400
@@ -86,7 +89,7 @@ def register_user():
     ).first()
 
     if existing_user:
-        return jsonify({"reason": "User  with this login, email, or phone already exists"}), 409
+        return jsonify({"reason": "User with this login, email, or phone already exists"}), 409
     hash = generate_password_hash(data['password'])
     print(hash)
     new_user = User(
@@ -102,7 +105,7 @@ def register_user():
     db.session.add(new_user)
     db.session.commit()
 
-    return jsonify({"message": "User  registered successfully"}), 201
+    return jsonify({"message": "User registered successfully"}), 201
 
 @app.route('/api/countries', methods=['GET'])
 def get_countries():
@@ -135,7 +138,7 @@ def get_countries_by_alpha2_code(alpha2_code):
         "alpha2": country.alpha2,
         "alpha3": country.alpha3,
         "region": country.region
-    } for country in countries])
+    } for country in countries][0])
 
 @app.route('/api/ping', methods=['GET'])
 def send():
