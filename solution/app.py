@@ -9,7 +9,7 @@ app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///prod.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['JWT_SECRET_KEY'] = 'your_jwt_secret_key'  # Замените на свой секретный ключ
-app.config['JWT_ACCESS_TOKEN_EXPIRES'] = datetime.timedelta(hours=1)  # Установите время жизни токена
+#app.config['JWT_ACCESS_TOKEN_EXPIRES'] = datetime.timedelta(hours=1)  # Установите время жизни токена
 db = SQLAlchemy(app)
 jwt = JWTManager(app)
 
@@ -51,25 +51,20 @@ def sign_in():
     login = data.get('login')
     password = data.get('password')
 
-    print(f"The username '{login}'")
-    print(f"The password '{password}'")
-
     if not login or not password:
         return jsonify({"reason": "Login and password are required"}), 400
 
     user = User.query.filter_by(login=login).first()
 
-    print(user.password, generate_password_hash(password) )
     if user and user.password == generate_password_hash(password):
-        access_token = create_access_token(identity=user.id)
+        access_token = create_access_token(identity=str(user.id), expires_delta=datetime.timedelta(hours=1))
         return jsonify(token=access_token), 200
     else:
         return jsonify({"reason": "Invalid login or password"}), 401
 
 @app.route('/api/auth/register', methods=['POST'])
 def register_user():
-    data = request.json
-    print(data) 
+    data = request.json 
 
     required_fields = ['login', 'email', 'password', 'countryCode', 'isPublic']
     missing_fields = [field for field in required_fields if field not in data]
@@ -143,6 +138,59 @@ def get_countries_by_alpha2_code(alpha2_code):
 @app.route('/api/ping', methods=['GET'])
 def send():
     return "ok", 200
+
+@app.route('/api/me/profile', methods=['GET', 'POST'])
+@jwt_required()
+def profile():
+    if request.method == "GET":
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        if user:
+            return jsonify({
+                "login": user.login,
+                "email": user.email,
+                "country_code": user.country_code,
+                "is_public": user.is_public,
+                "phone": user.phone,
+                "image": user.image
+            }), 200
+        else:
+            return jsonify({"reason": "User not found"}), 401
+    elif request.method == "POST":
+        data = request.json
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        if user:
+            if user.password == generate_password_hash(data["oldPassword"]):
+                if len(data["newPassword"]) < 8 :
+                    return jsonify({"reason": "Password must be at least 8 characters long"}), 400
+                else:
+                    user.password = generate_password_hash(data["newPassword"])
+                    db.session.commit()
+                    return jsonify({"status": "ok"}), 200
+            else:
+                return jsonify({"reason": "Old password is incorrect"}), 403
+            
+@app.route('/api/profiles/<profile_login>', methods=['GET', 'POST'])
+@jwt_required()
+def get_public_profile(profile_login):
+    user = User.query.filter_by(login=profile_login, is_public=1).first()
+    if user:
+        return jsonify({
+                "login": user.login,
+                "email": user.email,
+                "country_code": user.country_code,
+                "is_public": user.is_public,
+                "phone": user.phone,
+                "image": user.image
+        }), 200
+    else:
+        return jsonify({"reason": "User not found"}), 403
+    
+
+
+
+
 
 if __name__ == "__main__":
     app.run(debug=True, port=8080)
