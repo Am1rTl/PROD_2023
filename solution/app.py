@@ -39,7 +39,7 @@ class User(db.Model, UserMixin):
     def __init__(self, login, email, password, country_code, is_public, phone=None, image=None):
         self.login = login
         self.email = email
-        self.password = password  # Hash the password
+        self.password = password
         self.country_code = country_code
         self.is_public = is_public
         self.phone = phone
@@ -56,6 +56,7 @@ def sign_in():
 
     user = User.query.filter_by(login=login).first()
 
+    print(user.password, generate_password_hash(password))
     if user and user.password == generate_password_hash(password):
         access_token = create_access_token(identity=str(user.id), expires_delta=datetime.timedelta(hours=1))
         return jsonify(token=access_token), 200
@@ -95,8 +96,9 @@ def register_user():
 
     db.session.add(new_user)
     db.session.commit()
-
-    return jsonify({"message": "User registered successfully"}), 201
+    print("Login is", new_user.login)
+    print(jsonify({"profile": {"login": new_user.login, "email": new_user.email, "countryCode": new_user.country_code, "isPublic": new_user.is_public, "phone": new_user.phone, "image": new_user.image}}))
+    return jsonify({"profile": {"login": new_user.login, "email": new_user.email, "countryCode": new_user.country_code, "isPublic": new_user.is_public, "phone": new_user.phone, "image": new_user.image}}), 201
 
 @app.route('/api/countries', methods=['GET'])
 def get_countries():
