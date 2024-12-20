@@ -415,8 +415,209 @@ def submit_post():
         "dislikesCount": new_post.dislikesCount
     }), 200
 
+@app.route('/api/posts/<post_id>', methods=['GET'])
+@jwt_required()
+def get_post_by_id(post_id):
+    # Get the current user's ID from the JWT token
+    current_user_id = int(get_jwt_identity())
+    
+    # Retrieve the post by its ID
+    post = Post.query.get(post_id)
+    
+    if not post:
+        return jsonify({"reason": "Post not found"}), 404
+
+    # Check if the author's profile is public
+    author = User.query.filter_by(login=post.author).first()
+    
+    if author.is_public:
+        # If the profile is public, return the post
+        return jsonify({
+            "id": post.id,
+            "content": post.content,
+            "author": post.author,
+            "tags": eval(post.tags),
+            "createdAt": post.createdAt,
+            "likesCount": post.likesCount,
+            "dislikesCount": post.dislikesCount
+        }), 200
+    else:
+        # If the profile is private, check if the current user is the author or a friend
+        if current_user_id == author.id:
+            # The user is the author, return the post
+            return jsonify({
+                "id": post.id,
+                "content": post.content,
+                "author": post.author,
+                "tags": eval(post.tags),
+                "createdAt": post.createdAt,
+                "likesCount": post.likesCount,
+                "dislikesCount": post.dislikesCount
+            }), 200
+        else:
+            # Check if the current user is a friend of the author
+            friendship = Friendships.query.filter_by(user_id=current_user_id, friend_id=author.id).first()
+            if friendship:
+                # The user is a friend, return the post
+                return jsonify({
+                    "id": post.id,
+                    "content": post.content,
+                    "author": post.author,
+                    "tags": eval(post.tags),
+                    "createdAt": post.createdAt,
+                    "likesCount": post.likesCount,
+                    "dislikesCount": post.dislikesCount
+                }), 200
+            else:
+                # The user does not have access to the post
+                return jsonify({"reason": "Access to this post is denied"}), 403
+
+@app.route('/api/posts/feed/my', methods=['GET'])
+@jwt_required()
+def get_my_feed():
+    # Get the current user's ID from the JWT token
+    user_id = int(get_jwt_identity())
+    
+    # Get pagination parameters from the request
+    limit = request.args.get('limit', default=10, type=int)
+    offset = request.args.get('offset', default=0, type=int)
+
+    # Query the posts created by the current user, ordered by creation date
+    posts = Post.query.filter_by(author=User .query.get(user_id).login) \
+                      .order_by(Post.createdAt.desc()) \
+                      .offset(offset) \
+                      .limit(limit) \
+                      .all()
+
+    # If no posts are found, return an empty list
+    if not posts:
+        return jsonify([]), 200
+
+    # Prepare the response data
+    posts_list = [{
+        "id": post.id,
+        "content": post.content,
+        "author": post.author,
+        "tags": eval(post.tags),
+        "createdAt": post.createdAt,
+        "likesCount": post.likesCount,
+        "dislikesCount": post.dislikesCount
+    } for post in posts]
+
+    return jsonify(posts_list), 200
 
 
+@app.route('/api/posts/feed/<login>', methods=['GET'])
+@jwt_required()
+def get_feed_by_others(login):
+    # Get the current user's ID from the JWT token
+    current_user_id = int(get_jwt_identity())
+    
+    # Get pagination parameters from the request
+    limit = request.args.get('limit', default=10, type=int)
+    offset = request.args.get('offset', default=0, type=int)
+
+    # Find the user by login
+    user = User.query.filter_by(login=login).first()
+    if not user:
+        return jsonify({"reason": "User  not found"}), 404
+
+    # Check if the user's profile is public
+    if user.is_public:
+        # If the profile is public, return all posts by the user
+        posts = Post.query.filter_by(author=user.login) \
+                          .order_by(Post.createdAt.desc()) \
+                          .offset(offset) \
+                          .limit(limit) \
+                          .all()
+    else:
+        # If the profile is private, check if the current user is the author or a friend
+        if current_user_id == user.id:
+            # The user is the author, return all their posts
+            posts = Post.query.filter_by(author=user.login) \
+                              .order_by(Post.createdAt.desc()) \
+                              .offset(offset) \
+                              .limit(limit) \
+                              .all()
+        else:
+            # Check if the current user is a friend of the author
+            friendship = Friendships.query.filter_by(user_id=current_user_id, friend_id=user.id).first()
+            if not friendship:
+                return jsonify({"reason": "Access to this user's posts is denied"}), 404
+            
+            # The user is a friend, return all posts by the user
+            posts = Post.query.filter_by(author=user.login) \
+                              .order_by(Post.createdAt.desc()) \
+                              .offset(offset) \
+                              .limit(limit) \
+                              .all()
+
+    # Prepare the response data
+    posts_list = [{
+        "id": post.id,
+        "content": post.content,
+        "author": post.author,
+        "tags": eval(post.tags),
+        "createdAt": post.createdAt,
+        "likesCount": post.likesCount,
+        "dislikesCount": post.dislikesCount
+    } for post in posts]
+
+    return jsonify(posts_list), 200
+
+@app.route('/api/posts/<post_id>/like', methods=['POST'])
+@jwt_required()
+def like_post(post_id):
+    # Get the current user's ID from the JWT token
+    current_user_id = int(get_jwt_identity())
+    
+    # Retrieve the post by its ID
+    post = Post.query.get(post_id)
+    
+    if not post:
+        return jsonify({"reason": "Post not found or access denied"}), 404
+
+    # Increment the likes count
+    post.likesCount += 1
+    db.session.commit()
+
+    # Return the updated post details
+    return jsonify({
+        "id": post.id,
+        "content": post.content,
+        "author": post.author,
+        "tags": eval(post.tags),
+        "createdAt": post.createdAt,
+        "likesCount": post.likesCount,
+        "dislikesCount": post.dislikesCount
+    }), 200
+
+@app.route('/api/posts/<post_id>/dislike', methods=['POST'])
+@jwt_required()
+def dislike_post(post_id):
+    # Get the current user's ID from the JWT token
+    current_user_id = int(get_jwt_identity())
+    
+    # Retrieve the post by its ID
+    post = Post.query.get(post_id)
+    
+    if not post:
+        return jsonify({"reason": "Post not found or access denied"}), 404
+
+    # Increment the dislikes count
+    post.dislikesCount += 1
+    db.session.commit()
+
+    # Return the updated post details
+    return jsonify({
+        "id": post.id,
+        "content": post.content,
+        "author": post.author,
+        "tags": eval(post.tags),
+        "createdAt": post.createdAt,
+        "likesCount": post.likesCount,
+        "dislikesCount": post.dislikesCount
+    }), 200
 
 if __name__ == "__main__":
     app.run(debug=True, port=8080)
