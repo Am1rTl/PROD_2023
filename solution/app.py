@@ -17,12 +17,43 @@ def generate_password_hash(password):
     password_hashed = hashlib.md5(password.encode()).hexdigest()
     return password_hashed
 
+class Post(db.Model):
+    __tablename__ = 'posts'
+    id = db.Column(db.String(100), primary_key=True)
+    content = db.Column(db.String(1000), nullable=False)
+    author_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    likes_count = db.Column(db.Integer, default=0)
+    dislikes_count = db.Column(db.Integer, default=0)
+    author = db.relationship('User', backref=db.backref('posts', lazy=True))
+    def __init__(self, content, author_id):
+        self.content = content
+        self.author_id = author_id
+
+class PostTag(db.Model):
+    __tablename__ = 'post_tags'
+    id = db.Column(db.Integer, primary_key=True)
+    post_id = db.Column(db.String(100), db.ForeignKey('posts.id'), nullable=False)
+    tag = db.Column(db.String(20), nullable=False)
+    post = db.relationship('Post', backref=db.backref('tags', lazy=True))
+    def __init__(self, post_id, tag):
+        self.post_id = post_id
+        self.tag = tag
+
 class Countries(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.Text, nullable=False)
     alpha2 = db.Column(db.Text, nullable=False)
     alpha3 = db.Column(db.Text, nullable=False)
     region = db.Column(db.Text, nullable=False)
+
+class Friendships(db.Model):
+    __tablename__ = 'friendships'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    friend_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
 class User(db.Model, UserMixin):
     __tablename__ = 'users'     
@@ -243,6 +274,91 @@ def get_public_profile(profile_login):
 def no_login():
     return jsonify({"reason": "You must be logged in to access this endpoint"}), 403
     
+
+
+@app.route('/api/friends', methods=['GET'])
+@jwt_required()
+def friends_list():
+    user_id = int(get_jwt_identity())
+    limit = request.args.get('limit', default=10, type=int)
+    offset = request.args.get('offset', default=0, type=int)
+
+    friends = db.session.query(User).join(Friendships, Friendships.friend_id == User.id).filter(Friendships.user_id == user_id).order_by(Friendships.created_at.desc()).offset(offset).limit(limit).all()
+
+    if not friends:
+        return jsonify([]), 200
+
+    friends_list = [{
+        "login": friend.login,
+        "addedAt": friend.created_at.isoformat()  
+    } for friend in friends]
+
+    return jsonify(friends_list), 200
+
+@app.route('/api/friends/add', methods=['POST'])
+@jwt_required()
+def friends_add():
+    data = request.json
+    login = data.get('login')
+
+    if not login:
+        return jsonify({"reason": "Login is required"}), 400
+
+    current_user_id = get_jwt_identity()
+    current_user = User.query.get(current_user_id)
+
+    if current_user.login == login:
+        return jsonify({"status": "ok"}), 200
+
+    friend = User.query.filter_by(login=login).first()
+    if not friend:
+        return jsonify({"reason": "User not found"}), 404
+
+    existing_friendship = Friendships.query.filter_by(user_id=current_user_id, friend_id=friend.id).first()
+    if existing_friendship:
+        return jsonify({"status": "ok"}), 200
+
+    new_friendship = Friendships(user_id=current_user_id, friend_id=friend.id)
+    db.session.add(new_friendship)
+    db.session.commit()
+
+    return jsonify({"status": "ok"}), 200
+
+@app.route('/api/friends/remove', methods=['POST'])
+@jwt_required()
+def friends_remove():
+    data = request.json
+    login = data.get('login')
+
+    if not login:
+        return jsonify({"reason": "Login is required"}), 400
+
+    current_user_id = get_jwt_identity()
+    friend = User.query.filter_by(login=login).first()
+    if not friend:
+        return jsonify({"reason": "User not found"}), 404
+
+    friendship = Friendships.query.filter_by(user_id=current_user_id, friend_id=friend.id).first()
+    if not friendship:
+        return jsonify({"status": "ok"}), 200
+
+    db.session.delete(friendship)
+    db.session.commit()
+
+    return jsonify({"status": "ok"}), 200
+
+@app.route("/api/posts/new", methods=["POST"])
+@jwt_required()
+def posts_new():
+    data = request.json
+    content = data["content"]
+    tags = data["tags"]
+
+    if not content or not tags :
+        return jsonify({"reason": "Content and tags are required"}), 400
+    current_user_id = get_jwt_identity()
+
+
 
 
 if __name__ == "__main__":

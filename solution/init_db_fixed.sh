@@ -24,6 +24,33 @@ sqlite3 instance/prod.db <<EOF
     region TEXT
   );
 
+  CREATE TABLE posts (
+      id VARCHAR(100) PRIMARY KEY,
+      content VARCHAR(1000) NOT NULL,
+      author_id INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      likes_count INTEGER DEFAULT 0,
+      dislikes_count INTEGER DEFAULT 0,
+      FOREIGN KEY (author_id) REFERENCES users(id)
+  );
+
+  CREATE TABLE post_tags (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      post_id VARCHAR(100) NOT NULL,
+      tag VARCHAR(20) NOT NULL,
+      FOREIGN KEY (post_id) REFERENCES posts(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS friendships (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    friend_id INTEGER NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (friend_id) REFERENCES users(id),
+    UNIQUE (user_id, friend_id)  
+  );
+
   INSERT INTO countries (name, alpha2, alpha3, region) VALUES
   ('Afghanistan','AF','AFG','Asia'),
   ('Åland Islands','AX','ALA','Europe'),
