@@ -24,22 +24,15 @@ sqlite3 instance/prod.db <<EOF
     region TEXT
   );
 
-  CREATE TABLE posts (
-      id VARCHAR(100) PRIMARY KEY,
-      content VARCHAR(1000) NOT NULL,
-      author_id INTEGER NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      likes_count INTEGER DEFAULT 0,
-      dislikes_count INTEGER DEFAULT 0,
-      FOREIGN KEY (author_id) REFERENCES users(id)
-  );
-
-  CREATE TABLE post_tags (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      post_id VARCHAR(100) NOT NULL,
-      tag VARCHAR(20) NOT NULL,
-      FOREIGN KEY (post_id) REFERENCES posts(id)
-  );
+  CREATE TABLE IF NOT EXISTS posts (
+    id TEXT PRIMARY KEY NOT NULL,
+    content TEXT NOT NULL,
+    author TEXT NOT NULL,
+    tags TEXT NOT NULL,
+    createdAt TEXT NOT NULL,
+    likesCount INTEGER NOT NULL DEFAULT 0 CHECK (likesCount >= 0),
+    dislikesCount INTEGER NOT NULL DEFAULT 0 CHECK (dislikesCount >= 0)
+);
 
   CREATE TABLE IF NOT EXISTS friendships (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

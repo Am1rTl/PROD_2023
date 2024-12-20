@@ -1,6 +1,8 @@
 import hashlib
 import datetime
-from flask import Flask, request, jsonify
+import uuid
+from sqlalchemy import CheckConstraint
+from flask import Flask, json, request, jsonify
 from flask_login import UserMixin
 from flask_sqlalchemy import SQLAlchemy
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
@@ -19,26 +21,41 @@ def generate_password_hash(password):
 
 class Post(db.Model):
     __tablename__ = 'posts'
-    id = db.Column(db.String(100), primary_key=True)
-    content = db.Column(db.String(1000), nullable=False)
-    author_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
-    likes_count = db.Column(db.Integer, default=0)
-    dislikes_count = db.Column(db.Integer, default=0)
-    author = db.relationship('User', backref=db.backref('posts', lazy=True))
-    def __init__(self, content, author_id):
-        self.content = content
-        self.author_id = author_id
 
-class PostTag(db.Model):
-    __tablename__ = 'post_tags'
-    id = db.Column(db.Integer, primary_key=True)
-    post_id = db.Column(db.String(100), db.ForeignKey('posts.id'), nullable=False)
-    tag = db.Column(db.String(20), nullable=False)
-    post = db.relationship('Post', backref=db.backref('tags', lazy=True))
-    def __init__(self, post_id, tag):
-        self.post_id = post_id
-        self.tag = tag
+    id = db.Column(db.Text, primary_key=True, nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    author = db.Column(db.Text, nullable=False)
+    tags = db.Column(db.Text, nullable=False)  # Stored as a comma-separated string
+    createdAt = db.Column(db.Text, nullable=False)
+    likesCount = db.Column(db.Integer, nullable=False, default=0)
+    dislikesCount = db.Column(db.Integer, nullable=False, default=0)
+
+    __table_args__ = (
+        CheckConstraint('likesCount >= 0', name='check_likesCount_non_negative'),
+        CheckConstraint('dislikesCount >= 0', name='check_dislikesCount_non_negative'),
+    )
+
+    def __init__(self, id, content, author, tags, createdAt, likesCount=0, dislikesCount=0):
+        self.id = id
+        self.content = content
+        self.author = author
+        self.tags = tags
+        self.createdAt = createdAt
+        self.likesCount = likesCount
+        self.dislikesCount = dislikesCount
+
+    def save(self):
+        db.session.add(self)
+        db.session.commit()
+
+    def update(self, **kwargs):
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+        db.session.commit()
+
+    def delete(self):
+        db.session.delete(self)
+        db.session.commit()
 
 class Countries(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -347,16 +364,56 @@ def friends_remove():
 
     return jsonify({"status": "ok"}), 200
 
-@app.route("/api/posts/new", methods=["POST"])
+@app.route('/api/posts/new', methods=['POST'])
 @jwt_required()
-def posts_new():
+def submit_post():
+    # Get the current user's ID from the JWT token
+    user_id = int(get_jwt_identity())
+    
+    # Get the JSON data from the request
     data = request.json
-    content = data["content"]
-    tags = data["tags"]
-
-    if not content or not tags :
+    
+    # Validate the required fields
+    content = data.get('content')
+    tags = data.get('tags')
+    tags.sort()
+    tags = str(tags)
+    print("The tag is", tags)
+    
+    if not content or not tags:
         return jsonify({"reason": "Content and tags are required"}), 400
-    current_user_id = get_jwt_identity()
+
+    # Generate a unique ID for the post (you can use UUID or any other method)
+    post_id = str(uuid.uuid4())  # Make sure to import uuid at the top of your file
+
+    # Get the current timestamp
+    created_at = datetime.datetime.utcnow().isoformat()
+
+    # Create a new Post instance
+    author_login =User.query.get(user_id)
+
+    print("The author login is", author_login.login)
+    new_post = Post(
+        id=post_id,
+        content=content,
+        author=author_login.login,  # Assuming you want to store the user ID as the author
+        tags=tags,
+        createdAt=created_at
+    )
+
+    # Save the post to the database
+    new_post.save()
+
+    # Return a response with the post details
+    return jsonify({
+        "id": new_post.id,
+        "content": new_post.content,
+        "author": new_post.author,
+        "tags": eval(new_post.tags),
+        "createdAt": new_post.createdAt,
+        "likesCount": new_post.likesCount,
+        "dislikesCount": new_post.dislikesCount
+    }), 200
 
 
 
